@@ -48,6 +48,13 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         self.next_index = {peer_id: self.logs_collection.count() for peer_id in self.peers}
         self.match_index = {peer_id: 0 for peer_id in self.peers}
 
+    def reset_election_timer(self):
+        if self.election_timer:
+            self.election_timer.cancel()  # Stop the current timer if it is running
+
+        self.election_timer = threading.Timer(self.election_timeout, self.start_election)
+        self.election_timer.start()
+
     def start_election(self):
         self.role = 'candidate'
         self.current_term += 1
