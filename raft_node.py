@@ -118,15 +118,37 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
     def send_append_entries(self, peer_id):
         channel = grpc.insecure_channel(self.peers[peer_id])
         stub = raft_pb2_grpc.RaftServiceStub(channel)
-        entries = list(self.logs_collection.find({"index": {"$gt": self.commit_index}}))
-        last_log = list(self.logs_collection.find().sort("index", -1).limit(1))[0]
+        prev_log_index = self.next_index[peer_id] - 1
+        prev_log_term = self.logs_collection.find_one({"index": prev_log_index})['term'] if prev_log_index >= 0 else 0
+        entries = list(self.logs_collection.find({"index": {"$gte": self.next_index[peer_id]}}))
 
         request = raft_pb2.AppendEntriesRequest(term=self.current_term, leaderId=self.node_id,
                                                 prevLogIndex=last_log['index'], prevLogTerm=last_log['term'],
                                                 entries=entries, leaderCommit=self.commit_index)
         response = stub.AppendEntries(request)
 
+        request = raft_pb2.AppendEntriesRequest(
+            term=self.current_term, leaderId=self.node_id,
+            prevLogIndex=prev_log_index, prevLogTerm=prev_log_term,
+            entries=entries, leaderCommit=self.commit_index
+        )
 
+        try:
+            response = stub.AppendEntries(request)
+            if response.success:
+                self.match_index[peer_id] = request.prevLogIndex + len(request.entries)
+                self.next_index[peer_id] = self.match_index[peer_id] + 1
+
+                for n in sorted(self.match_index.values(), reverse=True):
+                    if (n > self.commit_index and
+                            self.logs_collection.find_one({"index": n})['term'] == self.current_term):
+                        if list(self.match_index.values()).count(n) > len(self.peers) // 2:
+                            self.commit_index = n
+                            break
+            else:
+                self.next_index[peer_id] = max(0, self.next_index[peer_id] - 1)
+        except grpc.RpcError as e:
+            print(f"Failed to send AppendEntries to {peer_id}: {str(e)}")
 
         # channel = grpc.insecure_channel(self.peers[peer_id])
         # stub = raft_pb2_grpc.RaftServiceStub(channel)
