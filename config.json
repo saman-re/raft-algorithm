@@ -8,7 +8,7 @@
         {
             "id": "node2",
             "address": "localhost:50052",
-            "state": "ready"
+            "state": "not_ready"
         },
         {
             "id": "node3",
