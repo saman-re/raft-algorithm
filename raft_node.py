@@ -56,16 +56,17 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         self.election_timer.start()
 
     def start_election(self):
-        self.role = 'candidate'
-        self.current_term += 1
-        self.voted_for = self.node_id
-        self.vote_count = 1  # vote for self
-        self.state_collection.update_one({"node_id": self.node_id},
-                                         {"$set": {"current_term": self.current_term, "voted_for": self.voted_for}},
-                                         upsert=True)
+        with threading.Lock():
+            self.role = 'candidate'
+            self.current_term += 1
+            self.voted_for = self.node_id
+            self.vote_count = 1  # vote for self
+            self.state_collection.update_one({"node_id": self.node_id},
+                                             {"$set": {"current_term": self.current_term, "voted_for": self.voted_for}},
+                                             upsert=True)
 
-        for peer_id in self.peers:
-            self.send_vote_request(peer_id)
+            for peer_id in self.peers:
+                self.send_vote_request(peer_id)
 
     def send_vote_request(self, peer_id):
         channel = grpc.insecure_channel(self.peers[peer_id])
