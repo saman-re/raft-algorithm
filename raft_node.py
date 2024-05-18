@@ -48,9 +48,11 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         self.match_index = {peer_id: 0 for peer_id in self.peers}
 
     def reset_election_timer(self):
+        """Resets the election timer with a random timeout."""
         if self.election_timer:
             self.election_timer.cancel()  # Stop the current timer if it is running
 
+        # Set the timeout to a random value (for example, between 150ms to 300ms)
         self.election_timer = threading.Timer(self.election_timeout, self.start_election)
         self.election_timer.start()
 
@@ -105,8 +107,6 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
 
     def become_leader(self):
         self.role = 'leader'
-        for peer_id in self.peers:
-            self.send_append_entries(peer_id)
         self.send_heartbeats_periodically()
 
     def send_heartbeats_periodically(self):
@@ -122,11 +122,6 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         prev_log_term = self.logs_collection.find_one({"index": prev_log_index})['term'] if prev_log_index >= 0 else 0
         entries = list(self.logs_collection.find({"index": {"$gte": self.next_index[peer_id]}}))
 
-        request = raft_pb2.AppendEntriesRequest(term=self.current_term, leaderId=self.node_id,
-                                                prevLogIndex=last_log['index'], prevLogTerm=last_log['term'],
-                                                entries=entries, leaderCommit=self.commit_index)
-        response = stub.AppendEntries(request)
-
         request = raft_pb2.AppendEntriesRequest(
             term=self.current_term, leaderId=self.node_id,
             prevLogIndex=prev_log_index, prevLogTerm=prev_log_term,
@@ -136,9 +131,11 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         try:
             response = stub.AppendEntries(request)
             if response.success:
+                # Follower appended the entries successfully
                 self.match_index[peer_id] = request.prevLogIndex + len(request.entries)
                 self.next_index[peer_id] = self.match_index[peer_id] + 1
 
+                # Update commit index if majority of followers have acknowledged
                 for n in sorted(self.match_index.values(), reverse=True):
                     if (n > self.commit_index and
                             self.logs_collection.find_one({"index": n})['term'] == self.current_term):
@@ -146,43 +143,10 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
                             self.commit_index = n
                             break
             else:
+                # Log inconsistency, decrement next index and retry
                 self.next_index[peer_id] = max(0, self.next_index[peer_id] - 1)
         except grpc.RpcError as e:
             print(f"Failed to send AppendEntries to {peer_id}: {str(e)}")
-
-        # channel = grpc.insecure_channel(self.peers[peer_id])
-        # stub = raft_pb2_grpc.RaftServiceStub(channel)
-        #
-        # prev_log_index = self.next_index[peer_id] - 1
-        # prev_log_term = self.logs_collection.find_one({"index": prev_log_index})['term'] if prev_log_index >= 0 else 0
-        # entries = list(self.logs_collection.find({"index": {"$gte": self.next_index[peer_id]}}))
-        #
-        # request = raft_pb2.AppendEntriesRequest(
-        #     term=self.current_term, leaderId=self.node_id,
-        #     prevLogIndex=prev_log_index, prevLogTerm=prev_log_term,
-        #     entries=entries, leaderCommit=self.commit_index
-        # )
-        #
-        # try:
-        #     response = stub.AppendEntries(request)
-        #     if response.success:
-        #         # Follower appended the entries successfully
-        #         self.match_index[peer_id] = request.prevLogIndex + len(request.entries)
-        #         self.next_index[peer_id] = self.match_index[peer_id] + 1
-        #
-        #         # Update commit index if majority of followers have acknowledged
-        #         for n in sorted(self.match_index.values(), reverse=True):
-        #             if n > self.commit_index and self.logs_collection.find_one({"index": n})['term'] == self.current_term:
-        #                 if list(self.match_index.values()).count(n) > len(self.peers) // 2:
-        #                     self.commit_index = n
-        #                     break
-        #     else:
-        #         # Log inconsistency, decrement next index and retry
-        #         self.next_index[peer_id] = max(0, self.next_index[peer_id] - 1)
-        # except grpc.RpcError as e:
-        #     print(f"Failed to send AppendEntries to {peer_id}: {str(e)}")
-
-
 
     def AppendEntries(self, request, context):
         if request.term < self.current_term:
