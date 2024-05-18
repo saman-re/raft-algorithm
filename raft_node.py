@@ -36,7 +36,6 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         self.election_timer = threading.Timer(self.election_timeout, self.start_election)
         self.election_timer.start()
 
-        # Load state from MongoDB
         saved_state = self.state_collection.find_one({"node_id": self.node_id})
         if saved_state:
             self.current_term = saved_state['current_term']
@@ -60,7 +59,7 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
             self.role = 'candidate'
             self.current_term += 1
             self.voted_for = self.node_id
-            self.vote_count = 1  # vote for self
+            self.vote_count = 1
             self.state_collection.update_one({"node_id": self.node_id},
                                              {"$set": {"current_term": self.current_term, "voted_for": self.voted_for}},
                                              upsert=True)
@@ -82,6 +81,27 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
             self.vote_count += 1
             if self.vote_count > len(self.peers) // 2:
                 self.become_leader()
+
+    def RequestVote(self, request, context):
+        term = request.term
+        candidateId = request.candidateId
+        lastLogIndex = request.lastLogIndex
+        lastLogTerm = request.lastLogTerm
+
+        last_log_list = list(self.logs_collection.find().sort("index", -1).limit(1))
+        last_log_index = last_log_list[0]['index'] if last_log_list else 0
+        last_log_term = last_log_list[0]['term'] if last_log_list else 0
+        if (term > self.current_term or
+                (term == self.current_term and
+                 (lastLogTerm > last_log_term or
+                  (lastLogTerm == last_log_term and lastLogIndex >= last_log_index)))):
+
+            self.current_term = term
+            self.voted_for = candidateId
+
+            return raft_pb2.VoteResponse(term=self.current_term, voteGranted=True)
+        else:
+            return raft_pb2.VoteResponse(term=self.current_term, voteGranted=False)
 
     def become_leader(self):
         self.role = 'leader'
