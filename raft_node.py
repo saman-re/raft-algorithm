@@ -33,8 +33,8 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         # self.update_peers_timeout.start()
 
         self.election_timeout = random.uniform(1.5, 2.5)  # random timeout between 1.5 and 2.5 seconds
-        self.timer = threading.Timer(self.election_timeout, self.start_election)
-        self.timer.start()
+        self.election_timer = threading.Timer(self.election_timeout, self.start_election)
+        self.election_timer.start()
 
         # Load state from MongoDB
         saved_state = self.state_collection.find_one({"node_id": self.node_id})
