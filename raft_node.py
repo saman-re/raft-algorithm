@@ -184,13 +184,32 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
 
 
 
+    def AppendEntries(self, request, context):
+        if request.term < self.current_term:
+            return raft_pb2.AppendEntriesResponse(term=self.current_term, success=False)
+
+        self.reset_election_timer()
+
+        last_log_list = list(self.logs_collection.find().sort("index", -1).limit(1))
+        last_log_index = last_log_list[0]['index'] if last_log_list else 0
+        if request.prevLogIndex >= last_log_index or (
+                last_log_list[request.prevLogIndex].term if request.prevLogIndex >= 0 else 0) != request.prevLogTerm:
+            return raft_pb2.AppendEntriesResponse(term=self.current_term, success=False)
+
+        entry_index = request.prevLogIndex + 1
+        while entry_index < last_log_index and entry_index - request.prevLogIndex - 1 < len(request.entries) and \
+                last_log_list[entry_index].term != request.entries[entry_index - request.prevLogIndex - 1].term:
+            self.logs_collection.delete_one({'index': entry_index})
+
+        if entry_index - request.prevLogIndex - 1 < len(request.entries):
+            for new_entry in request.entries:
+                self.logs_collection.insert_one({'index': new_entry.index, 'term': new_entry.term})
+
+        if request.leaderCommit > self.commit_index:
+            self.commit_index = min(request.leaderCommit, last_log_index - 1)
 
 
-
-
-
-
-
+        return raft_pb2.AppendEntriesResponse(term=self.current_term, success=True)
 
 
 def serve(node_id, config_path):
