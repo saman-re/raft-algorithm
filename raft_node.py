@@ -107,6 +107,13 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         self.role = 'leader'
         for peer_id in self.peers:
             self.send_append_entries(peer_id)
+        self.send_heartbeats_periodically()
+
+    def send_heartbeats_periodically(self):
+        while self.role == 'leader':
+            for peer_id in self.peers:
+                self.send_append_entries(peer_id)
+            time.sleep(0.5)
 
     def send_append_entries(self, peer_id):
         channel = grpc.insecure_channel(self.peers[peer_id])
