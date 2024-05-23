@@ -1,0 +1,19 @@
+{
+    "nodes": [
+        {
+            "id": "node1",
+            "address": "localhost:50051",
+            "state": "not_ready"
+        },
+        {
+            "id": "node2",
+            "address": "localhost:50052",
+            "state": "not_ready"
+        },
+        {
+            "id": "node3",
+            "address": "localhost:50053",
+            "state": "not_ready"
+        }
+    ]
+}
