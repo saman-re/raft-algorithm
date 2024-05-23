@@ -57,7 +57,7 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         """Resets the election timer with a random timeout."""
         if self.election_timer:
             self.election_timer.cancel()  # Stop the current timer if it is running
-            print(f"election for node {self.node_id} is canceled")
+            print(f"election timer for node {self.node_id} is canceled")
 
         # Set the timeout to a random value (for example, between 150ms to 300ms)
         self.election_timer = threading.Timer(self.election_timeout, self.start_election)
@@ -66,8 +66,10 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
 
     def start_election(self):
         with threading.Lock():
+            print(f"start election for node: {self.node_id}")
             self.role = 'candidate'
             self.current_term += 1
+            print(f"election for node {self.node_id}|term {self.current_term}")
             self.voted_for = self.node_id
             self.vote_count = 1
             self.state_collection.update_one({"node_id": self.node_id},
@@ -216,4 +218,5 @@ def make_server_ready(config_path, config):
 
 
 if __name__ == '__main__':
+    print(sys.argv[1])
     serve(sys.argv[1], "./config.json")
