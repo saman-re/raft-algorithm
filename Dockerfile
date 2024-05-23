@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the project files into the container
 COPY . .
 
+RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. ./proto/raft.proto
 # Command to run the application
 # This can be overridden when running the container, e.g.,
 # docker run <image_name> python3 raft_node.py node1
