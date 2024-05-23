@@ -117,6 +117,7 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
 
     def become_leader(self):
         self.role = 'leader'
+        print(f"node {self.node_id} become leader with vote count {self.vote_count}")
         self.send_heartbeats_periodically()
 
     def send_heartbeats_periodically(self):
@@ -218,5 +219,4 @@ def make_server_ready(config_path, config):
 
 
 if __name__ == '__main__':
-    print(sys.argv[1])
     serve(sys.argv[1], "./config.json")
