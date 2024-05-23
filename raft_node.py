@@ -50,7 +50,7 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
             return
         self.peers = {n['id']: n['address'] for n in config['nodes'] if
                       n['id'] != self.node_id and n['state'] == 'ready'}
-        self.next_index = {peer_id: self.logs_collection.count() for peer_id in self.peers}
+        self.next_index = {peer_id: self.logs_collection.count_documents({}) for peer_id in self.peers}
         self.match_index = {peer_id: 0 for peer_id in self.peers}
 
     def reset_election_timer(self):
