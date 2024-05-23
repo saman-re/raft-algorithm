@@ -19,5 +19,6 @@ RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. ./proto/r
 # Command to run the application
 # This can be overridden when running the container, e.g.,
 # docker run <image_name> python3 raft_node.py node1
-CMD ["python3", "raft_node.py", "node1"]
+ENTRYPOINT ["python", "raft_node.py"]
 
+CMD ["node1"]
