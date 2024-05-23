@@ -23,25 +23,31 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         self.db = self.client[f'raft_db_{self.node_id}']
         self.logs_collection = self.db[f'logs_{self.node_id}']
         self.state_collection = self.db[f'state_{self.node_id}']
+        print("data base initiated")
 
         self.next_index = {peer_id: self.logs_collection.count_documents({}) for peer_id in self.peers}
         self.match_index = {peer_id: 0 for peer_id in self.peers}
         self.commit_index = 0
         self.last_applied = 0
 
-        # self.update_peers_timeout = threading.Timer(1, self.update_peers, args=(config,))
-        # self.update_peers_timeout.start()
+        self.update_peers_timeout = threading.Timer(2, self.update_peers, args=(config,))
+        self.update_peers_timeout.start()
 
         self.election_timeout = random.uniform(1.5, 2.5)  # random timeout between 1.5 and 2.5 seconds
         self.election_timer = threading.Timer(self.election_timeout, self.start_election)
         self.election_timer.start()
-
+        print(f"{self.node_id} timeout is: {self.election_timeout}")
         saved_state = self.state_collection.find_one({"node_id": self.node_id})
         if saved_state:
             self.current_term = saved_state['current_term']
             self.voted_for = saved_state.get('voted_for')
+            print(f"{self.node_id} has retrieved with term: {self.current_term},voted_for: {self.voted_for}")
 
     def update_peers(self, config):
+        if len(self.peers) == len(config['nodes']):
+            self.update_peers_timeout.cancel()
+            print(f"all peers updated for node {self.node_id}||{self.peers.__str__}")
+            return
         self.peers = {n['id']: n['address'] for n in config['nodes'] if
                       n['id'] != self.node_id and n['state'] == 'ready'}
         self.next_index = {peer_id: self.logs_collection.count() for peer_id in self.peers}
@@ -51,10 +57,12 @@ class RaftNode(raft_pb2_grpc.RaftServiceServicer):
         """Resets the election timer with a random timeout."""
         if self.election_timer:
             self.election_timer.cancel()  # Stop the current timer if it is running
+            print(f"election for node {self.node_id} is canceled")
 
         # Set the timeout to a random value (for example, between 150ms to 300ms)
         self.election_timer = threading.Timer(self.election_timeout, self.start_election)
         self.election_timer.start()
+        print(f"new election for node {self.node_id} started")
 
     def start_election(self):
         with threading.Lock():
